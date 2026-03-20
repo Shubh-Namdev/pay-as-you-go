@@ -1,0 +1,31 @@
+server:
+  port: 7070
+spring:
+  datasource:
+    # AWS
+    # url: jdbc:mysql://sunking.c106ugc8gvds.ap-south-1.rds.amazonaws.com:3306/sunking_payg
+    # username: admin 
+    # password: 
+
+    # Docker
+    url: jdbc:mysql://localhost:3306/sunking_payg
+    username: root
+    password: root123
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+
+  kafka:
+    # AWS
+    # bootstrap-servers: 43.205.235.73:9092
+    # Docker
+    bootstrap-servers: localhost:9092
+
+  redis:
+    # AWS
+    # host: 43.205.235.73
+    # Docker
+    host: localhost
+    port: 6379
