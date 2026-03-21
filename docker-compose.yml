@@ -7,8 +7,8 @@ services:
     environment:
       MYSQL_ROOT_PASSWORD: root123
       MYSQL_DATABASE: sunking_payg
-      MYSQL_USER: sunking
-      MYSQL_PASSWORD: sunking12345
+      # MYSQL_USER: sunking
+      # MYSQL_PASSWORD: 
     ports:
       - "3306:3306"
     healthcheck:
@@ -39,7 +39,7 @@ services:
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
     volumes:
