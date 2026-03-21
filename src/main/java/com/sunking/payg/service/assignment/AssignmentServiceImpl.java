@@ -9,6 +9,8 @@ import com.sunking.payg.repository.AssignmentRepository;
 import com.sunking.payg.repository.CustomerRepository;
 import com.sunking.payg.repository.DeviceRepository;
 import lombok.RequiredArgsConstructor;
+
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -20,6 +22,7 @@ public class AssignmentServiceImpl implements AssignmentService {
     private final AssignmentRepository assignmentRepository;
     private final CustomerRepository customerRepository;
     private final DeviceRepository deviceRepository;
+    private final RedisTemplate<String, Object> redisTemplate;
 
     @Override
     public void assignDevice(Long deviceId, Long customerId) {
@@ -41,8 +44,10 @@ public class AssignmentServiceImpl implements AssignmentService {
         assignment.setLastPaymentDate(LocalDateTime.now());
 
         // next due calculation
-        if (device.getPaymentPlanType().name().equals("DAILY")) {
-            assignment.setNextDueDate(LocalDateTime.now().plusDays(1));
+        if (device.getPaymentPlanType().name().equals("DAILY")) {          
+            assignment.setNextDueDate(LocalDateTime.now().plusMinutes(3));
+            // assignment.setNextDueDate(LocalDateTime.now().plusDays(1));
+
         } else {
             assignment.setNextDueDate(LocalDateTime.now().plusWeeks(1));
         }
@@ -52,14 +57,29 @@ public class AssignmentServiceImpl implements AssignmentService {
 
     @Override
     public DeviceStatusResponse getDeviceStatus(Long deviceId) {
+        String key = "device:" + deviceId + ":status";
+
+        // 1. Check cache
+        Object cached = redisTemplate.opsForValue().get(key);
+        if (cached != null) {
+            return DeviceStatusResponse.builder()
+                    .deviceId(deviceId)
+                    .status(DeviceStatus.valueOf(cached.toString()))
+                    .message("Fetched from cache")
+                    .build();
+        }
+
 
         DeviceAssignment assignment = assignmentRepository.findByDeviceId(deviceId)
                 .orElseThrow(() -> new RuntimeException("Assignment not found"));
 
+        // 3. Cache it
+        redisTemplate.opsForValue().set(key, assignment.getStatus().name());
+
         return DeviceStatusResponse.builder()
                 .deviceId(deviceId)
                 .status(assignment.getStatus())
-                .message("Device status fetched successfully")
+                .message("Fetched from DB")
                 .build();
     }
 }
