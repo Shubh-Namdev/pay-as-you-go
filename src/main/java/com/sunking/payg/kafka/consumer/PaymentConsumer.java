@@ -10,6 +10,8 @@ import com.sunking.payg.repository.AssignmentRepository;
 import com.sunking.payg.repository.DeviceRepository;
 import com.sunking.payg.repository.PaymentRepository;
 import lombok.RequiredArgsConstructor;
+
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
@@ -22,6 +24,8 @@ public class PaymentConsumer {
     private final PaymentRepository paymentRepository;
     private final AssignmentRepository assignmentRepository;
     private final DeviceRepository deviceRepository;
+    private final RedisTemplate<String, Object> redisTemplate;
+
 
     @KafkaListener(topics = "payment-events", groupId = "payment-group")
     public void consume(PaymentEvent event) {
@@ -54,7 +58,8 @@ public class PaymentConsumer {
 
         // Update next due date
         if (device.getPaymentPlanType().name().equals("DAILY")) {
-            assignment.setNextDueDate(LocalDateTime.now().plusDays(1));
+            assignment.setNextDueDate(LocalDateTime.now().plusMinutes(3));
+            // assignment.setNextDueDate(LocalDateTime.now().plusDays(1));
         } else {
             assignment.setNextDueDate(LocalDateTime.now().plusWeeks(1));
         }
@@ -63,5 +68,9 @@ public class PaymentConsumer {
         assignment.setStatus(DeviceStatus.ACTIVE);
 
         assignmentRepository.save(assignment);
+
+        // ✅ Update Redis cache
+        String key = "device:" + assignment.getDeviceId() + ":status";
+        redisTemplate.opsForValue().set(key, assignment.getStatus().name());
     }
 }
