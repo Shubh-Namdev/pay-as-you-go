@@ -45,7 +45,7 @@ public class AssignmentServiceImpl implements AssignmentService {
 
         // next due calculation
         if (device.getPaymentPlanType().name().equals("DAILY")) {          
-            assignment.setNextDueDate(LocalDateTime.now().plusMinutes(3));
+            assignment.setNextDueDate(LocalDateTime.now().plusMinutes(5));
             // assignment.setNextDueDate(LocalDateTime.now().plusDays(1));
 
         } else {
