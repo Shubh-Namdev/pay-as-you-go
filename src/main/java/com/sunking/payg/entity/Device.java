@@ -8,7 +8,11 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "devices")
+@Table(name = "devices",
+    indexes = {
+        @Index(name = "idx_device_serial", columnList = "serial_number", unique = true)
+    }
+)
 @Data
 public class Device {
 
