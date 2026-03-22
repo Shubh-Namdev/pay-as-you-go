@@ -29,20 +29,32 @@ public class Payment {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(unique = true, nullable = false)
+    @Column(name = "idempotency_key", nullable = false, unique = true)
     private String idempotencyKey;
 
+    @Column(name = "customer_id", nullable = false)
     private Long customerId;
+
+    @Column(name = "device_id", nullable = false)
     private Long deviceId;
 
+    @Column(precision = 10, scale = 2, nullable = false)
     private BigDecimal amount;
 
+    @Column(name = "payment_date")
     private LocalDateTime paymentDate;
 
     @Enumerated(EnumType.STRING)
     private PaymentStatus status;
 
+    @Column(name = "external_txn_id")
     private String externalTxnId;
 
-    private LocalDateTime createdAt = LocalDateTime.now();
+    @Column(name = "created_at", nullable = false)
+    private LocalDateTime createdAt;
+
+    @PrePersist
+    public void prePersist() {
+        this.createdAt = LocalDateTime.now();
+    }
 }
