@@ -22,6 +22,8 @@ spring:
     # bootstrap-servers: 43.205.235.73:9092
     # Docker
     bootstrap-servers: localhost:9092
+    listener:
+      concurrency: 3
 
   redis:
     # AWS
