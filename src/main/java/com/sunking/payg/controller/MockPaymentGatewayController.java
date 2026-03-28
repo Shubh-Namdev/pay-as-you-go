@@ -1,7 +1,10 @@
 package com.sunking.payg.controller;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestTemplate;
+
+import com.sunking.payg.config.PaygServiceConfig;
 
 import lombok.RequiredArgsConstructor;
 
@@ -13,6 +16,9 @@ import java.util.Random;
 @RequestMapping("/mock-payment")
 @RequiredArgsConstructor
 public class MockPaymentGatewayController {
+
+    @Autowired
+    private PaygServiceConfig paygServiceConfig;
 
     private final RestTemplate restTemplate;
     private final Random random = new Random();
@@ -35,9 +41,11 @@ public class MockPaymentGatewayController {
                 callback.put("status", success ? "SUCCESS" : "FAILED");
                 callback.put("transactionId", "TXN_" + System.currentTimeMillis());
 
-                System.out.println("Gateway sending payment confirmation to PAYG : "+paymentId);
+                String paygURL = paygServiceConfig.getUrl() + "/payments/callback";
+
+                System.out.println("Gateway sending payment confirmation to "+paygURL+ " for payment id "  +paymentId);
                 restTemplate.postForObject(
-                        "http://localhost:7070/payments/callback",
+                        paygURL,
                         callback,
                         Void.class
                 );
