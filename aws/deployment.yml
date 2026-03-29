@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payg-service
+  labels:
+    app: payg-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: payg-service
+  template:
+    metadata:
+      labels:
+        app: payg-service
+    spec:
+      containers:
+      - name: payg-service
+        image: image-name
+        ports:
+        - containerPort: 7070
+        env:
+        - name: SPRING_PROFILES_ACTIVE
+          value: "aws"
+        - name: SPRING_DATASOURCE_PASSWORD
+          value: ""
+        - name: SPRING_KAFKA_BOOTSTRAP-SERVERS
+          value: "65.0.184.140:9092"
+        - name: SPRING_DATA_REDIS_HOST
+          value: "65.0.184.140"
+        - name: GATEWAY_URL
+          value: "http://payg-service-lb"
+        - name: PAYG_URL
+          value: "http://payg-service-lb"
+        
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: payg-service-lb
+spec:
+  type: LoadBalancer
+  selector:
+    app: payg-service
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 7070

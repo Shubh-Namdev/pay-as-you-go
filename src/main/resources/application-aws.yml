@@ -19,9 +19,3 @@ spring:
      redis:
         host: 13.201.44.215
         port: 6379
-
-gateway:
-  url: 
-
-payg:
-  url: 
