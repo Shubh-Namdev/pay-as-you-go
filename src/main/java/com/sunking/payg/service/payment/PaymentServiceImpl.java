@@ -6,6 +6,8 @@ import com.sunking.payg.entity.DeviceAssignment;
 import com.sunking.payg.entity.Payment;
 import com.sunking.payg.enums.DeviceStatus;
 import com.sunking.payg.enums.PaymentStatus;
+import com.sunking.payg.exceptions.BusinessException;
+import com.sunking.payg.exceptions.ResourceNotFoundException;
 import com.sunking.payg.kafka.event.PaymentEvent;
 import com.sunking.payg.kafka.producer.PaymentProducer;
 import com.sunking.payg.repository.AssignmentRepository;
@@ -13,6 +15,7 @@ import com.sunking.payg.repository.DeviceRepository;
 import com.sunking.payg.repository.PaymentRepository;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -23,6 +26,7 @@ import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class PaymentServiceImpl implements PaymentService {
 
     private final PaymentRepository paymentRepository;
@@ -32,28 +36,37 @@ public class PaymentServiceImpl implements PaymentService {
     private final PaymentProducer paymentProducer;
 
     @Override
-    public String createPayment(CreatePaymentRequest request) {
+    public String createPayment(CreatePaymentRequest request, Long customerId) {
 
-        // ✅ 1. Idempotency check
+        log.info("Creating payment for customerId={}, deviceId={}, amount={}",
+                customerId, request.getDeviceId(), request.getAmount());
+
+        // Idempotency check
         Optional<Payment> existing = paymentRepository
                 .findByIdempotencyKey(request.getIdempotencyKey());
-        if (existing.isPresent()) return "duplicate payment found with id " +existing.get().getId();
+        if (existing.isPresent()) {
+             log.warn("Duplicate payment request detected for idempotencyKey={}, paymentId={}",
+                    request.getIdempotencyKey(), existing.get().getId());
+            return "duplicate payment found with id " +existing.get().getId();
+        }
 
-
-        // ✅ 2. Check if already processing
+        // Check if already processing
         Optional<Payment> pending = paymentRepository
                 .findTopByCustomerIdAndDeviceIdAndStatusOrderByCreatedAtDesc(
-                        request.getCustomerId(),
+                        customerId,
                         request.getDeviceId(),
                         PaymentStatus.PENDING
                 );
 
-        if (pending.isPresent()) return "payment is already in progress with payment id" +pending.orElseThrow().getId();
-        
+        if (pending.isPresent()) {
+            log.warn("Payment already in progress for customerId={}, deviceId={}, paymentId={}",
+                    customerId, request.getDeviceId(), pending.get().getId());
+            return "payment is already in progress with payment id" +pending.orElseThrow().getId();
+        }
 
-        // ✅ 3. Create new payment
+        // Create new payment
         Payment payment = new Payment();
-        payment.setCustomerId(request.getCustomerId());
+        payment.setCustomerId(customerId);
         payment.setDeviceId(request.getDeviceId());
         payment.setAmount(request.getAmount());
         payment.setStatus(PaymentStatus.PENDING);
@@ -71,64 +84,93 @@ public class PaymentServiceImpl implements PaymentService {
             );
 
             paymentProducer.publish(event);
+            log.info("Payment event published to Kafka for paymentId={}", saved.getId());
 
             return "payment initiated with payment id" +saved.getId();
             
         }catch (DataIntegrityViolationException ex) {
-            return "payment is already in progress with payment id " +paymentRepository.findByCustomerIdAndDeviceId(
-                        request.getCustomerId(), request.getDeviceId()
-                    ).orElseThrow().getId();
-        }
+            log.warn("Race condition detected for idempotencyKey={}, customerId={}, deviceId={}",
+                    request.getIdempotencyKey(), customerId, request.getDeviceId());
 
+            Payment existingPayment = paymentRepository
+                    .findByCustomerIdAndDeviceId(customerId, request.getDeviceId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Payment not found after duplicate detection"));
+                    
+
+            return "payment is already in progress with payment id " + existingPayment.getId();
+        }
     }
 
     @Override
     public void updatePaymentStatus(Long paymentId, String status, String txnId) {
 
-        System.out.println("Updating payment status to Database with : "+paymentId);
+        log.info("Updating payment status for paymentId={}, status={}", paymentId, status);
 
         Payment payment = paymentRepository.findById(paymentId)
-                .orElseThrow();
+                .orElseThrow(() -> {
+                    log.error("Payment not found for paymentId={}", paymentId);
+                    return new ResourceNotFoundException("Payment not found with id " + paymentId);
+                });
         
-        if ("SUCCESS".equals(status)) {
+        try {
+            if ("SUCCESS".equals(status)) {
 
-            payment.setStatus(PaymentStatus.SUCCESS);
-            payment.setExternalTxnId(txnId);
-            paymentRepository.save(payment);
+                payment.setStatus(PaymentStatus.SUCCESS);
+                payment.setExternalTxnId(txnId);
+                paymentRepository.save(payment);
+                log.info("Payment marked SUCCESS for paymentId={}, txnId={}", paymentId, txnId);
 
-            DeviceAssignment assignment = assignmentRepository
-                    .findByDeviceId(payment.getDeviceId())
-                    .orElseThrow();
+                DeviceAssignment assignment = assignmentRepository
+                        .findByDeviceId(payment.getDeviceId())
+                        .orElseThrow(() -> {
+                            log.error("Assignment not found for deviceId={}", payment.getDeviceId());
+                            return new ResourceNotFoundException("Assignment not found");
+                        });
 
-            Device device = deviceRepository.findById(payment.getDeviceId()).orElseThrow();
+                Device device = deviceRepository.findById(payment.getDeviceId())
+                        .orElseThrow(() -> {
+                            log.error("Device not found for deviceId={}", payment.getDeviceId());
+                            return new ResourceNotFoundException("Device not found");
+                        });
 
-            assignment.setRemainingBalance(
-                    assignment.getRemainingBalance().subtract(payment.getAmount())
-            );
+                assignment.setRemainingBalance(
+                        assignment.getRemainingBalance().subtract(payment.getAmount())
+                );
 
-            assignment.setLastPaymentDate(LocalDateTime.now());
+                assignment.setLastPaymentDate(LocalDateTime.now());
 
-            if (device.getPaymentPlanType().name().equals("DAILY")) {
-                assignment.setNextDueDate(LocalDateTime.now().plusMinutes(5));
-                // assignment.setNextDueDate(LocalDateTime.now().plusDays(1));
+                if (device.getPaymentPlanType().name().equals("DAILY")) {
+                    assignment.setNextDueDate(LocalDateTime.now().plusMinutes(5));
+                    // assignment.setNextDueDate(LocalDateTime.now().plusDays(1));
+                } else {
+                    assignment.setNextDueDate(LocalDateTime.now().plusWeeks(1));
+                }
+
+                assignment.setStatus(DeviceStatus.ACTIVE);
+                assignmentRepository.save(assignment);
+                log.info("Device unlocked for deviceId={}, customerId={}",
+                        assignment.getDeviceId(), assignment.getCustomerId());
+
+                
+                // update redis
+                redisTemplate.opsForValue().set(
+                        "device:" + assignment.getDeviceId() + ":status",
+                        DeviceStatus.ACTIVE.name()
+                );
+
+                // TBD
+                // Send notification to customer for payment confirmation from payg side
+
             } else {
-                assignment.setNextDueDate(LocalDateTime.now().plusWeeks(1));
+                payment.setStatus(PaymentStatus.FAILED);
+                paymentRepository.save(payment);
+                log.warn("Payment marked FAILED for paymentId={}", paymentId);
             }
+        }catch (Exception ex) {
 
-            assignment.setStatus(DeviceStatus.ACTIVE);
-            assignmentRepository.save(assignment);
+            log.error("Error while updating payment status for paymentId={}", paymentId, ex);
 
-            redisTemplate.opsForValue().set(
-                    "device:" + assignment.getDeviceId() + ":status",
-                    DeviceStatus.ACTIVE.name()
-            );
-
-            // TBD
-            // Send notification to customer for payment confirmation from payg side
-
-        } else {
-            payment.setStatus(PaymentStatus.FAILED);
-            paymentRepository.save(payment);
+            throw new BusinessException("Failed to update payment status");
         }
     }
 }

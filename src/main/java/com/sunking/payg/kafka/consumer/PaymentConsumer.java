@@ -2,11 +2,13 @@ package com.sunking.payg.kafka.consumer;
 
 import com.sunking.payg.entity.Payment;
 import com.sunking.payg.enums.PaymentStatus;
+import com.sunking.payg.exceptions.ResourceNotFoundException;
 import com.sunking.payg.kafka.event.PaymentEvent;
 import com.sunking.payg.repository.PaymentRepository;
 import com.sunking.payg.service.integration.PaymentGatewayService;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
@@ -16,6 +18,7 @@ import org.springframework.retry.annotation.Backoff;
 
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public class PaymentConsumer {
 
     private final PaymentRepository paymentRepository;
@@ -29,18 +32,27 @@ public class PaymentConsumer {
     @KafkaListener(topics = "payment-events", groupId = "payment-group")
     public void consume(PaymentEvent event) {
 
-        System.out.println("Initiating payment with gateway: " + event);
+        log.info("Received payment event: paymentId={}, customerId={}, deviceId={}",
+                event.getPaymentId(), event.getCustomerId(), event.getDeviceId());
 
         Payment payment = paymentRepository.findById(event.getPaymentId())
-                .orElseThrow();
+                .orElseThrow(() -> {
+                    log.error("Payment not found for paymentId={}", event.getPaymentId());
+                    return new ResourceNotFoundException(
+                            "Payment not found with id " + event.getPaymentId());
+                });
 
         // Idempotency
         if (payment.getStatus() != PaymentStatus.PENDING) {
+            log.warn("Skipping paymentId={} as status is {}",
+                    payment.getId(), payment.getStatus());
             return;
         }
 
         try {
             // CALL EXTERNAL GATEWAY (INITIATE ONLY)
+            log.info("Initiating payment with gateway for paymentId={}", payment.getId());
+
             paymentGatewayService.initiatePayment(
                     payment.getId(),
                     payment.getCustomerId(),
@@ -48,8 +60,10 @@ public class PaymentConsumer {
                     payment.getAmount()
             );
 
+            log.info("Payment initiation request sent successfully for paymentId={}", payment.getId());
+
         }catch (Exception ex) {
-            System.out.println("Gateway call failed, retrying...");
+            log.error("Gateway call failed for paymentId={}, will retry", payment.getId(), ex);
             throw ex; 
         }
     }
@@ -58,76 +72,26 @@ public class PaymentConsumer {
     @KafkaListener(topics = "payment-events-dlt", groupId = "payment-group")
     public void handleDLT(PaymentEvent event) {
 
-        System.out.println("Moved to DLT: " + event);
+        log.error("Message moved to DLT after retries exhausted: paymentId={}", event.getPaymentId());
 
-        Payment payment = paymentRepository.findById(event.getPaymentId())
-                .orElseThrow();
+        try {
+            Payment payment = paymentRepository.findById(event.getPaymentId())
+                    .orElseThrow(() -> {
+                        log.error("Payment not found in DLT for paymentId={}", event.getPaymentId());
+                        return new ResourceNotFoundException(
+                                "Payment not found with id " + event.getPaymentId());
+                    });
 
-        payment.setStatus(PaymentStatus.FAILED);
-        paymentRepository.save(payment);
+            payment.setStatus(PaymentStatus.FAILED);
+            paymentRepository.save(payment);
+
+            log.error("Marked paymentId={} as FAILED after retries", payment.getId());
+
+        } catch (Exception ex) {
+            // DO NOT throw → avoid infinite loop
+            log.error("Failed to process DLT event for paymentId={}", event.getPaymentId(), ex);
+        }
     }
     
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-// @KafkaListener(topics = "payment-events", groupId = "payment-group")
-//     public void consume(PaymentEvent event) {
-//         System.out.println("Received event: " + event);
-
-//         Payment payment = paymentRepository.findById(event.getPaymentId())
-//                 .orElseThrow();
-
-//         // Idempotency check
-//         if (payment.getStatus() == PaymentStatus.SUCCESS) {
-//             return;
-//         }
-
-//         // Simulate external API success
-//         payment.setStatus(PaymentStatus.SUCCESS);
-//         payment.setExternalTxnId("TXN_" + System.currentTimeMillis());
-//         paymentRepository.save(payment);
-
-//         DeviceAssignment assignment = assignmentRepository.findByDeviceId(event.getDeviceId())
-//                 .orElseThrow();
-
-//         Device device = deviceRepository.findById(event.getDeviceId()).orElseThrow();
-
-//         // Update balance
-//         assignment.setRemainingBalance(
-//                 assignment.getRemainingBalance().subtract(event.getAmount())
-//         );
-
-//         assignment.setLastPaymentDate(LocalDateTime.now());
-
-//         // Update next due date
-//         if (device.getPaymentPlanType().name().equals("DAILY")) {
-//             assignment.setNextDueDate(LocalDateTime.now().plusMinutes(3));
-//             // assignment.setNextDueDate(LocalDateTime.now().plusDays(1));
-//         } else {
-//             assignment.setNextDueDate(LocalDateTime.now().plusWeeks(1));
-//         }
-
-//         // Unlock device
-//         assignment.setStatus(DeviceStatus.ACTIVE);
-
-//         assignmentRepository.save(assignment);
-
-//         // ✅ Update Redis cache
-//         String key = "device:" + assignment.getDeviceId() + ":status";
-//         redisTemplate.opsForValue().set(key, assignment.getStatus().name());
-//     }
