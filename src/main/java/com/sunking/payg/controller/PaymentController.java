@@ -9,6 +9,8 @@ import lombok.RequiredArgsConstructor;
 
 import java.util.Map;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -19,9 +21,12 @@ public class PaymentController {
     private final PaymentService paymentService;
     private final PaymentRepository paymentRepository;
 
+    @PreAuthorize("hasRole('CUSTOMER')")
     @PostMapping
-    public String createPayment(@RequestBody CreatePaymentRequest request) {
-        String paymentStatus = paymentService.createPayment(request);
+    public String createPayment(@RequestBody CreatePaymentRequest request, Authentication authentication) {
+        Long userId = Long.valueOf(authentication.getName());
+        String paymentStatus = paymentService.createPayment(request, userId);
+
         return paymentStatus;
     }
 
