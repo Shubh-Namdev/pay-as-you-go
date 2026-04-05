@@ -29,4 +29,5 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
                 );
 
         Page<Payment> findByStatus(PaymentStatus status, Pageable pageable );
+
 }

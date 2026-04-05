@@ -1,6 +1,7 @@
 package com.sunking.payg.service.payment;
 
 import com.sunking.payg.dto.CreatePaymentRequest;
+import com.sunking.payg.dto.PaymentResponse;
 import com.sunking.payg.entity.Device;
 import com.sunking.payg.entity.DeviceAssignment;
 import com.sunking.payg.entity.Payment;
@@ -36,7 +37,7 @@ public class PaymentServiceImpl implements PaymentService {
     private final PaymentProducer paymentProducer;
 
     @Override
-    public String createPayment(CreatePaymentRequest request, Long customerId) {
+    public PaymentResponse createPayment(CreatePaymentRequest request, Long customerId) {
 
         log.info("Creating payment for customerId={}, deviceId={}, amount={}",
                 customerId, request.getDeviceId(), request.getAmount());
@@ -47,7 +48,7 @@ public class PaymentServiceImpl implements PaymentService {
         if (existing.isPresent()) {
              log.warn("Duplicate payment request detected for idempotencyKey={}, paymentId={}",
                     request.getIdempotencyKey(), existing.get().getId());
-            return "duplicate payment found with id " +existing.get().getId();
+            return mapToResponse(existing.get());
         }
 
         // Check if already processing
@@ -61,7 +62,7 @@ public class PaymentServiceImpl implements PaymentService {
         if (pending.isPresent()) {
             log.warn("Payment already in progress for customerId={}, deviceId={}, paymentId={}",
                     customerId, request.getDeviceId(), pending.get().getId());
-            return "payment is already in progress with payment id" +pending.orElseThrow().getId();
+            return mapToResponse(pending.get());
         }
 
         // Create new payment
@@ -86,7 +87,7 @@ public class PaymentServiceImpl implements PaymentService {
             paymentProducer.publish(event);
             log.info("Payment event published to Kafka for paymentId={}", saved.getId());
 
-            return "payment initiated with payment id" +saved.getId();
+            return mapToResponse(saved);
             
         }catch (DataIntegrityViolationException ex) {
             log.warn("Race condition detected for idempotencyKey={}, customerId={}, deviceId={}",
@@ -97,7 +98,7 @@ public class PaymentServiceImpl implements PaymentService {
                     .orElseThrow(() -> new ResourceNotFoundException("Payment not found after duplicate detection"));
                     
 
-            return "payment is already in progress with payment id " + existingPayment.getId();
+            return mapToResponse(existingPayment);
         }
     }
 
@@ -172,5 +173,31 @@ public class PaymentServiceImpl implements PaymentService {
 
             throw new BusinessException("Failed to update payment status");
         }
+    }
+
+
+    @Override
+    public PaymentResponse getPaymentStatus(Long customerId, Long deviceId) {
+
+        Payment payment = paymentRepository.findByCustomerIdAndDeviceId(
+            customerId, deviceId).orElseThrow(
+                () -> new ResourceNotFoundException("Payment not found with customer id " + customerId + "and device id " + deviceId)
+            );
+
+        return mapToResponse(payment);
+                            
+    }
+
+    private PaymentResponse mapToResponse(Payment payment) {
+
+        return PaymentResponse.builder()
+                    .id(payment.getId())
+                    .customerId(payment.getCustomerId())
+                    .deviceId(payment.getDeviceId())
+                    .amount(payment.getAmount())
+                    .paymentDate(payment.getPaymentDate())
+                    .status(payment.getStatus())
+                    .externalTxnId(payment.getExternalTxnId())
+                    .build();
     }
 }
