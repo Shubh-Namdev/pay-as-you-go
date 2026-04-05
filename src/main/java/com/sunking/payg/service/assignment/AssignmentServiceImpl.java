@@ -1,5 +1,6 @@
 package com.sunking.payg.service.assignment;
 
+import com.sunking.payg.dto.DeviceResponse;
 import com.sunking.payg.dto.DeviceStatusResponse;
 import com.sunking.payg.entity.User;
 import com.sunking.payg.entity.Device;
@@ -13,6 +14,9 @@ import com.sunking.payg.repository.DeviceRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -73,6 +77,20 @@ public class AssignmentServiceImpl implements AssignmentService {
             assignment.setNextDueDate(LocalDateTime.now().plusWeeks(1));
         }
 
+        
+        try {
+            device.setAvailable(false);
+            deviceRepository.save(device);
+        }catch(DataIntegrityViolationException ex) {
+            log.warn("Race condition detected for serial number={}, customerId={}, deviceId={}",
+                    device.getSerialNumber(), customerId, deviceId);
+
+            DeviceStatusResponse deviceStatusResponse = mapToResponse(assignment);
+            deviceStatusResponse.setMessage("DUPLICATE ASSIGNMENT");
+            return deviceStatusResponse;
+        }
+        
+
         assignmentRepository.save(assignment);
         log.info("Device assigned successfully: deviceId={}, customerId={}", deviceId, customerId);
 
@@ -119,34 +137,40 @@ public class AssignmentServiceImpl implements AssignmentService {
         return mapToResponse(assignment);
     }
 
+    @Override
+    public Page<DeviceStatusResponse> getAllCustomerAssignedDevices(Long customerId, int page, int size) {
 
-    public DeviceStatusResponse validateDeviceAndReturnStatus(Long customerId, Long deviceId) {
+        log.info("Fetching users with page={}, size={}", page, size);
 
-        String key = "device:" + deviceId + ":customerId";
-
-        // check cache
-        Object cached = redisTemplate.opsForValue().get(key);
-        if (cached != null) {
-            Long cachedCustomerId = Long.valueOf(cached.toString());
-
-            if (!cachedCustomerId.equals(customerId))
-                throw new BusinessException("Invalid device access");
-
-            return getDeviceStatus(deviceId);
+        if (page < 0 || size <= 0) {
+            log.warn("Invalid pagination parameters: page={}, size={}", page, size);
+            throw new BusinessException("Invalid pagination parameters");
         }
 
-        // fetch from db
-        DeviceAssignment assignment = assignmentRepository.findByDeviceId(deviceId)
-                .orElseThrow(() ->
-                        new ResourceNotFoundException("Assignment not found for device: " + deviceId));
+        Page<DeviceStatusResponse> result = assignmentRepository.findByCustomerId(customerId, PageRequest.of(page, size))
+                .map(this::mapToResponse);
 
-        if (!assignment.getCustomerId().equals(customerId)) 
-            throw new BusinessException("Invalid device access");
-        
-        // cache it
-        redisTemplate.opsForValue().set(key, customerId);
+        log.info("Fetched {} users for page={}", result.getNumberOfElements(), page);
 
-        return mapToResponse(assignment);
+        return result;
+    }
+
+    @Override
+    public Page<DeviceStatusResponse> getAllAssignedDevices(int page, int size) {
+
+        log.info("Fetching users with page={}, size={}", page, size);
+
+        if (page < 0 || size <= 0) {
+            log.warn("Invalid pagination parameters: page={}, size={}", page, size);
+            throw new BusinessException("Invalid pagination parameters");
+        }
+
+        Page<DeviceStatusResponse> result = assignmentRepository.findAll(PageRequest.of(page, size))
+                .map(this::mapToResponse);
+
+        log.info("Fetched {} users for page={}", result.getNumberOfElements(), page);
+
+        return result;
     }
 
     
