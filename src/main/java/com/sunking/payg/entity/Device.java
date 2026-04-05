@@ -30,5 +30,7 @@ public class Device {
 
     private BigDecimal paymentAmount;
 
+    private String imageUrl;
+
     private LocalDateTime createdAt = LocalDateTime.now();
 }

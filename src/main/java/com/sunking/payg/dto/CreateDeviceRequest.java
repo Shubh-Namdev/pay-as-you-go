@@ -11,4 +11,5 @@ public class CreateDeviceRequest {
     private BigDecimal totalCost;
     private PaymentPlanType paymentPlanType;
     private BigDecimal paymentAmount;
+    private String imageUrl;
 }
