@@ -1,11 +1,16 @@
 package com.sunking.payg.controller;
 
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.sunking.payg.dto.AuthMeResponse;
 import com.sunking.payg.dto.LoginRequest;
 import com.sunking.payg.entity.User;
 import com.sunking.payg.exceptions.BusinessException;
@@ -38,5 +43,23 @@ public class AuthController {
 
         // generate token
         return jwtUtil.generateToken(String.valueOf(user.getId()), user.getRole().name());
+    }
+
+
+    @GetMapping("/me")
+    public ResponseEntity<AuthMeResponse> getCurrentUser(Authentication authentication) {
+
+        Long userId = Long.parseLong(authentication.getName());
+
+        // Get role from authorities
+        String role = authentication.getAuthorities()
+                .stream()
+                .findFirst()
+                .map(GrantedAuthority::getAuthority)
+                .orElse("UNKNOWN");
+        String trimmedRol = role.replace("ROLE_","");
+        AuthMeResponse response = new AuthMeResponse(userId, trimmedRol);
+
+        return ResponseEntity.ok(response);
     }
 }
