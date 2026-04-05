@@ -8,4 +8,5 @@ import com.sunking.payg.dto.DeviceResponse;
 public interface DeviceService {
     void registerDevice(CreateDeviceRequest request);
     Page<DeviceResponse> getAllDevices(int page,int size);
+    DeviceResponse findByDeviceId(Long deviceId);
 }

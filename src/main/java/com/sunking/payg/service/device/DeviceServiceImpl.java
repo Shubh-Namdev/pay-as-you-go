@@ -4,6 +4,7 @@ import com.sunking.payg.dto.CreateDeviceRequest;
 import com.sunking.payg.dto.DeviceResponse;
 import com.sunking.payg.entity.Device;
 import com.sunking.payg.exceptions.BusinessException;
+import com.sunking.payg.exceptions.ResourceNotFoundException;
 import com.sunking.payg.repository.DeviceRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -27,6 +28,7 @@ public class DeviceServiceImpl implements DeviceService {
         device.setTotalCost(request.getTotalCost());
         device.setPaymentPlanType(request.getPaymentPlanType());
         device.setPaymentAmount(request.getPaymentAmount());
+        device.setAvailable(true);
 
         deviceRepository.save(device);
     }
@@ -41,12 +43,21 @@ public class DeviceServiceImpl implements DeviceService {
             throw new BusinessException("Invalid pagination parameters");
         }
 
-        Page<DeviceResponse> result = deviceRepository.findAll(PageRequest.of(page, size))
+        Page<DeviceResponse> result = deviceRepository.findByAvailable(true, PageRequest.of(page, size))
                 .map(this::mapToResponse);
 
         log.info("Fetched {} devices for page={}", result.getNumberOfElements(), page);
 
         return result;
+    }
+
+    @Override
+    public DeviceResponse findByDeviceId(Long deviceId) {
+        Device device = deviceRepository.findById(deviceId)
+               .orElseThrow(() -> new ResourceNotFoundException("device not found with id "+deviceId));
+
+        return mapToResponse(device);
+               
     }
 
     private DeviceResponse mapToResponse(Device device) {

@@ -33,4 +33,6 @@ public class Device {
     private String imageUrl;
 
     private LocalDateTime createdAt = LocalDateTime.now();
+
+    private boolean isAvailable;
 }
