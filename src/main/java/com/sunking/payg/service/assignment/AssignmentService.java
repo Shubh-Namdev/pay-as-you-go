@@ -4,7 +4,7 @@ import com.sunking.payg.dto.DeviceStatusResponse;
 
 public interface AssignmentService {
 
-    void assignDevice(Long deviceId, Long customerId);
-
+    DeviceStatusResponse assignDevice(Long deviceId, Long customerId);
     DeviceStatusResponse getDeviceStatus(Long deviceId);
+    DeviceStatusResponse validateDeviceAndReturnStatus(Long customerId, Long deviceId);
 }
