@@ -1,6 +1,7 @@
 package com.sunking.payg.controller;
 
 import com.sunking.payg.dto.CreatePaymentRequest;
+import com.sunking.payg.dto.PaymentResponse;
 import com.sunking.payg.entity.Payment;
 import com.sunking.payg.enums.PaymentStatus;
 import com.sunking.payg.repository.PaymentRepository;
@@ -12,6 +13,8 @@ import java.util.Map;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+
 
 @RestController
 @RequestMapping("/payments")
@@ -23,12 +26,19 @@ public class PaymentController {
 
     @PreAuthorize("hasRole('CUSTOMER')")
     @PostMapping
-    public String createPayment(@RequestBody CreatePaymentRequest request, Authentication authentication) {
+    public PaymentResponse createPayment(@RequestBody CreatePaymentRequest request, Authentication authentication) {
         Long userId = Long.valueOf(authentication.getName());
-        String paymentStatus = paymentService.createPayment(request, userId);
-
-        return paymentStatus;
+        return paymentService.createPayment(request, userId);
     }
+
+    @PreAuthorize("hasRole('CUSTOMER')")
+    @GetMapping("/device/{deviceId}")
+    public PaymentResponse getMethodName(@PathVariable Long deviceId, Authentication authentication) {
+        Long customerId = Long.valueOf(authentication.getName());
+
+        return paymentService.getPaymentStatus(customerId, deviceId);
+    }
+    
 
     @PostMapping("/callback")
     public void handleCallback(@RequestBody Map<String, Object> request) {
