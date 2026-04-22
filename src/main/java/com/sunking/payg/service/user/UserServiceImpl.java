@@ -52,6 +52,7 @@ public class UserServiceImpl implements UserService {
         return mapToResponse(saved);
     }
 
+
     @Override
     public UserResponse getUser(Long id) {
 
@@ -65,6 +66,7 @@ public class UserServiceImpl implements UserService {
 
         return mapToResponse(user);
     }
+
 
     @Override
     public Page<UserResponse> getAllUsers(int page, int size) {
@@ -84,6 +86,7 @@ public class UserServiceImpl implements UserService {
         return result;
     }
 
+    
     private UserResponse mapToResponse(User user) {
         return UserResponse.builder()
                 .id(user.getId())

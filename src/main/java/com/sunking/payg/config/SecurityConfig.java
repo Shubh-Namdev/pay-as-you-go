@@ -40,7 +40,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
 
                         // public APIs
-                        .requestMatchers("/auth/login", "/users", "/devices", "/devices/{deviceId}").permitAll()
+                        .requestMatchers("/auth/login", "/users", "/devices", "/devices/{deviceId}", "/payments/callback").permitAll()
 
                         // everything else
                         .anyRequest().authenticated()

@@ -1,6 +1,5 @@
 package com.sunking.payg.service.assignment;
 
-import com.sunking.payg.dto.DeviceResponse;
 import com.sunking.payg.dto.DeviceStatusResponse;
 import com.sunking.payg.entity.User;
 import com.sunking.payg.entity.Device;
@@ -113,6 +112,7 @@ public class AssignmentServiceImpl implements AssignmentService {
         String key = "device:" + deviceId + ":status";
 
         // Check cache
+        System.out.println("Key : "+key);
         Object cached = redisTemplate.opsForValue().get(key);
         if (cached != null) {
             log.debug("Cache hit for device status: deviceId={}", deviceId);
@@ -134,8 +134,12 @@ public class AssignmentServiceImpl implements AssignmentService {
         // cache it
         redisTemplate.opsForValue().set(key, assignment.getStatus().name());
 
-        return mapToResponse(assignment);
+        DeviceStatusResponse deviceStatusResponse = mapToResponse(assignment);
+        deviceStatusResponse.setMessage("Fetched from db");
+
+        return deviceStatusResponse;
     }
+
 
     @Override
     public Page<DeviceStatusResponse> getAllCustomerAssignedDevices(Long customerId, int page, int size) {
@@ -155,6 +159,7 @@ public class AssignmentServiceImpl implements AssignmentService {
         return result;
     }
 
+    
     @Override
     public Page<DeviceStatusResponse> getAllAssignedDevices(int page, int size) {
 
