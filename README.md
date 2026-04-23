@@ -45,7 +45,7 @@ docker-compose up -d
 ## 🔌 Services Used
 
 * MySQL → Primary database
-* Kafka → Async event processing
+* Kafka → Asynchronous event processing
 * Redis → Caching & rate limiting
 
 ---
