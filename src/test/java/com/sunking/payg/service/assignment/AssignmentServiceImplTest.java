@@ -87,7 +87,7 @@ public class AssignmentServiceImplTest {
         DeviceStatusResponse deviceStatusResponse = assignmentService.getDeviceStatus(deviceId);
 
         // Assert
-        assertEquals(DeviceStatus.ACTIVE, deviceStatusResponse.getStatus().name());
+        assertEquals(DeviceStatus.ACTIVE, deviceStatusResponse.getStatus());
 
         verify(valueOperations, times(1))
             .get(key);
